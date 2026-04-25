@@ -1,0 +1,1251 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IMMO·IDF — Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg:       #0d0f12;
+    --bg2:      #13161b;
+    --bg3:      #1a1e25;
+    --border:   #252932;
+    --border2:  #2f3540;
+    --text:     #e8eaf0;
+    --text2:    #8891a0;
+    --text3:    #4e5766;
+    --green:    #00e5a0;
+    --yellow:   #f5c842;
+    --red:      #ff4d6a;
+    --blue:     #4d9fff;
+    --accent:   #00e5a0;
+    --font:     'Syne', sans-serif;
+    --mono:     'DM Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── TOPBAR ── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 0 20px;
+    height: 52px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .logo {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: .18em;
+    color: var(--accent);
+    padding-right: 16px;
+    border-right: 1px solid var(--border);
+  }
+  .api-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text3);
+  }
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--text3);
+    transition: background .3s;
+  }
+  .status-dot.ok  { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .status-dot.err { background: var(--red); }
+  .status-dot.loading { background: var(--yellow); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  .topbar-stats {
+    display: flex;
+    gap: 12px;
+    margin-left: auto;
+  }
+  .tstat {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text3);
+  }
+  .tstat b { color: var(--text2); font-weight: 500; }
+
+  .run-btn {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 5px 12px;
+    border: 1px solid var(--border2);
+    border-radius: 4px;
+    background: none;
+    color: var(--text2);
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .run-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .run-btn:disabled { opacity: .4; cursor: default; }
+
+  /* ── SORT BAR ── */
+  .sortbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 20px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .sortbar-label { font-size: 11px; color: var(--text3); font-family: var(--mono); margin-right: 4px; }
+  .sbtn {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 3px 10px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: none;
+    color: var(--text3);
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .sbtn:hover { border-color: var(--border2); color: var(--text2); }
+  .sbtn.on { background: var(--bg3); border-color: var(--accent); color: var(--accent); }
+
+  .dept-filter {
+    margin-left: auto;
+    display: flex;
+    gap: 5px;
+  }
+  .dfbtn {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 2px 8px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: none;
+    color: var(--text3);
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .dfbtn.on { border-color: var(--blue); color: var(--blue); background: rgba(77,159,255,.08); }
+
+  /* ── LAYOUT ── */
+  .layout {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    width: 220px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border2) transparent;
+  }
+  .sidebar::-webkit-scrollbar { width: 4px; }
+  .sidebar::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  .commune-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border);
+    gap: 8px;
+    transition: background .1s;
+  }
+  .commune-item:hover { background: var(--bg2); }
+  .commune-item.active { background: var(--bg3); border-left: 2px solid var(--accent); }
+
+  .ci-rank {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+    width: 16px;
+    flex-shrink: 0;
+  }
+  .ci-info { flex: 1; min-width: 0; }
+  .ci-name {
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text);
+  }
+  .ci-sub { font-size: 10px; color: var(--text3); margin-top: 1px; font-family: var(--mono); }
+  .ci-right { text-align: right; flex-shrink: 0; }
+  .ci-score { font-family: var(--mono); font-size: 13px; font-weight: 500; }
+  .ci-rdt { font-family: var(--mono); font-size: 10px; color: var(--text3); margin-top: 1px; }
+
+  .g { color: var(--green); }
+  .y { color: var(--yellow); }
+  .r { color: var(--red); }
+
+  /* ── MAIN ── */
+  .main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .detail-header {
+    padding: 16px 20px 12px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .detail-name {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -.02em;
+  }
+  .detail-sub { font-size: 12px; color: var(--text3); margin-top: 4px; font-family: var(--mono); }
+
+  .metrics-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .metric {
+    background: var(--bg);
+    padding: 10px 14px;
+  }
+  .metric-label { font-size: 10px; color: var(--text3); font-family: var(--mono); margin-bottom: 4px; }
+  .metric-value { font-family: var(--mono); font-size: 16px; font-weight: 500; }
+
+  /* ── TABS ── */
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    padding: 0 20px;
+  }
+  .tab {
+    font-size: 12px;
+    font-family: var(--mono);
+    padding: 8px 14px;
+    cursor: pointer;
+    color: var(--text3);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    background: none;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    transition: all .15s;
+  }
+  .tab:hover { color: var(--text2); }
+  .tab.on { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* ── TAB CONTENT ── */
+  .tab-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border2) transparent;
+  }
+
+  .section-title {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    margin-bottom: 10px;
+  }
+
+  /* ── OVERVIEW ── */
+  .overview-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  .panel {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px;
+  }
+  .panel-title {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    margin-bottom: 12px;
+  }
+  .chart-wrap { position: relative; width: 100%; height: 220px; }
+
+  /* ── INSEE PANEL ── */
+  .insee-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .insee-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+  }
+  .insee-label { font-size: 10px; color: var(--text3); font-family: var(--mono); margin-bottom: 4px; }
+  .insee-value { font-family: var(--mono); font-size: 15px; font-weight: 500; color: var(--text); }
+  .insee-delta { font-family: var(--mono); font-size: 10px; margin-top: 3px; }
+
+  /* ── IRIS TABLE ── */
+  .iris-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    margin-top: 4px;
+  }
+  .iris-table th {
+    font-family: var(--mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--text3);
+    text-align: left;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+    font-weight: 400;
+  }
+  .iris-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text2);
+  }
+  .iris-table tr:last-child td { border-bottom: none; }
+  .iris-table tr:hover td { background: var(--bg2); }
+  .iris-name { font-family: var(--font) !important; font-size: 12px !important; font-weight: 600; color: var(--text) !important; }
+
+  .score-bar-wrap { display: flex; align-items: center; gap: 8px; }
+  .score-bar { height: 3px; border-radius: 2px; }
+
+  /* ── SIMULATEUR ── */
+  .sim-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .sim-controls { display: flex; flex-direction: column; gap: 14px; }
+  .sim-row {}
+  .sim-label {
+    font-size: 11px;
+    color: var(--text3);
+    font-family: var(--mono);
+    margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .sim-label b { color: var(--text); font-weight: 500; }
+  input[type=range] {
+    width: 100%;
+    -webkit-appearance: none;
+    height: 3px;
+    background: var(--border2);
+    border-radius: 2px;
+    outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    box-shadow: 0 0 8px rgba(0,229,160,.4);
+  }
+  .sim-results {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    align-content: start;
+  }
+  .sr-item {}
+  .sr-label { font-family: var(--mono); font-size: 10px; color: var(--text3); margin-bottom: 4px; }
+  .sr-value { font-family: var(--mono); font-size: 15px; font-weight: 500; }
+
+  /* ── RADAR ── */
+  .radar-panel {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  /* ── ERREUR / LOADING ── */
+  .error-box {
+    background: rgba(255,77,106,.08);
+    border: 1px solid rgba(255,77,106,.3);
+    border-radius: 6px;
+    padding: 16px 20px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--red);
+    margin: 20px;
+    line-height: 1.8;
+  }
+  .loading-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 200px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text3);
+    gap: 8px;
+  }
+  .spinner {
+    width: 16px; height: 16px;
+    border: 2px solid var(--border2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .empty-iris {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text3);
+    padding: 20px 0;
+    text-align: center;
+  }
+
+  /* ── COMPARATIF TABLE ── */
+  .compare-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .compare-table th {
+    font-family: var(--mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--text3);
+    text-align: left;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+    font-weight: 400;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .compare-table th:hover { color: var(--text2); }
+  .compare-table td {
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text2);
+  }
+  .compare-table tr:hover td { background: var(--bg2); cursor: pointer; }
+  .compare-table tr.hl td { background: rgba(0,229,160,.05); }
+  .cn { font-family: var(--font) !important; font-size: 12px !important; font-weight: 600; color: var(--text) !important; }
+  .dept-tag {
+    font-family: var(--mono);
+    font-size: 9px;
+    padding: 1px 5px;
+    border-radius: 2px;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    color: var(--text3);
+    margin-left: 5px;
+  }
+
+  .no-data {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    min-height: 300px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text3);
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  /* ── ANNONCES ── */
+  .ann-badge { font-size:9px; background:var(--accent); color:#000; border-radius:8px; padding:1px 5px; margin-left:4px; vertical-align:middle; font-family:var(--mono); font-weight:500; }
+  .ann-filters { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:14px; padding:10px 12px; background:var(--bg2); border:1px solid var(--border); border-radius:6px; }
+  .ann-filter-group { display:flex; flex-direction:column; gap:3px; }
+  .ann-filter-label { font-size:9px; font-family:var(--mono); color:var(--text3); text-transform:uppercase; letter-spacing:.08em; }
+  .ann-filter-group input, .ann-filter-group select { font-family:var(--mono); font-size:11px; padding:4px 7px; background:var(--bg3); border:1px solid var(--border2); border-radius:3px; color:var(--text); outline:none; width:110px; }
+  .ann-filter-group input:focus, .ann-filter-group select:focus { border-color:var(--accent); }
+  .ann-scrape-btn { font-family:var(--mono); font-size:11px; padding:5px 12px; border:1px solid var(--accent); border-radius:3px; background:rgba(0,229,160,.08); color:var(--accent); cursor:pointer; margin-left:auto; transition:all .15s; }
+  .ann-scrape-btn:hover { background:rgba(0,229,160,.18); }
+  .ann-scrape-btn:disabled { opacity:.4; cursor:default; }
+  .ann-card { display:flex; align-items:center; gap:10px; padding:9px 11px; border-bottom:1px solid var(--border); transition:background .1s; }
+  .ann-card:hover { background:var(--bg2); }
+  .ann-card:last-child { border-bottom:none; }
+  .ann-badge-src { font-size:9px; padding:2px 6px; border-radius:3px; font-family:var(--mono); flex-shrink:0; }
+  .ann-badge-pap { background:rgba(255,77,106,.15); color:#ff6b85; border:1px solid rgba(255,77,106,.3); }
+  .ann-badge-lbc { background:rgba(245,200,66,.15); color:#f5c842; border:1px solid rgba(245,200,66,.3); }
+  .ann-info { flex:1; min-width:0; }
+  .ann-titre { font-size:12px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ann-sub { font-size:10px; color:var(--text3); margin-top:2px; font-family:var(--mono); }
+  .ann-right { text-align:right; flex-shrink:0; }
+  .ann-prix { font-family:var(--mono); font-size:13px; font-weight:500; color:var(--text); }
+  .ann-delta { font-family:var(--mono); font-size:11px; font-weight:500; margin-top:2px; }
+  .ann-delta.vg { color:var(--green); } .ann-delta.vr { color:var(--red); } .ann-delta.vy { color:var(--yellow); }
+  .ann-empty { font-family:var(--mono); font-size:11px; color:var(--text3); padding:30px; text-align:center; }
+  .ann-stats { display:flex; gap:12px; margin-bottom:10px; font-family:var(--mono); font-size:10px; color:var(--text3); }
+  .ann-stat-v { color:var(--text2); font-weight:500; }
+  .ann-sous-cote-toggle { font-family:var(--mono); font-size:10px; padding:3px 8px; border:1px solid var(--border); border-radius:3px; background:none; color:var(--text3); cursor:pointer; }
+  .ann-sous-cote-toggle.on { border-color:var(--green); color:var(--green); background:rgba(0,229,160,.08); }
+
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<header class="topbar">
+  <span class="logo">IMMO·IDF</span>
+  <div class="api-status">
+    <div class="status-dot loading" id="dot"></div>
+    <span id="api-label">connexion…</span>
+  </div>
+  <div class="topbar-stats" id="topbar-stats"></div>
+  <button class="run-btn" id="run-btn" onclick="runPipeline()" disabled title="Relance le pipeline (arrière-plan)">▶ pipeline</button>
+</header>
+
+<!-- SORT / FILTER BAR -->
+<div class="sortbar">
+  <span class="sortbar-label">trier :</span>
+  <button class="sbtn on" data-sort="score_final" onclick="setSort(this)">score</button>
+  <button class="sbtn" data-sort="rendement_brut" onclick="setSort(this)">rendement</button>
+  <button class="sbtn" data-sort="prix_m2" onclick="setSort(this)">prix m²</button>
+  <button class="sbtn" data-sort="revenu_median" onclick="setSort(this)">revenu</button>
+  <div class="dept-filter" id="dept-filter"></div>
+</div>
+
+<!-- LAYOUT -->
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main" id="main">
+    <div class="no-data"><div class="spinner"></div><span>Connexion à l'API…</span></div>
+  </main>
+</div>
+
+<script>
+const API = 'http://localhost:8000';
+let communes = [], selIdx = 0, sortKey = 'score_final', deptFilter = null;
+let barChart = null, radarChart = null;
+let activeTab = 'overview';
+const IDF_AVG = {};
+
+// ── Utils ────────────────────────────────────────────────────────────────────
+const N = n => n != null ? new Intl.NumberFormat('fr-FR').format(Math.round(n)) : '—';
+const Np = n => n != null ? n.toFixed(1) + '%' : '—';
+const gc = v => v >= 5 ? 'g' : v >= 4 ? 'y' : 'r';
+const gcs = v => v >= 7.5 ? 'g' : v >= 6 ? 'y' : 'r';
+const dept = c => c.code_insee?.slice(0, 2) || '—';
+
+// ── API ──────────────────────────────────────────────────────────────────────
+async function fetchCommunes() {
+  setStatus('loading', 'connexion…');
+  try {
+    const r = await fetch(`${API}/communes`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    communes = await r.json();
+    if (!communes.length) {
+      setStatus('err', 'aucune donnée — lancez le pipeline');
+      showNoData();
+      return;
+    }
+    computeAverages();
+    buildDeptFilter();
+    setStatus('ok', `API connectée — ${communes.length} communes`);
+    document.getElementById('run-btn').disabled = false;
+    updateTopStats();
+    renderSidebar();
+    showCommune(0);
+  } catch(e) {
+    setStatus('err', `API hors ligne — lancez: python main.py api`);
+    showApiError(e);
+  }
+}
+
+async function fetchIris(code) {
+  try {
+    const r = await fetch(`${API}/communes/${code}/iris`);
+    if (!r.ok) return [];
+    return await r.json();
+  } catch { return []; }
+}
+
+async function runPipeline() {
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true; btn.textContent = '⏳ en cours…';
+  try {
+    const r = await fetch(`${API}/pipeline/run`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({force_refresh: false})
+    });
+    const d = await r.json();
+    btn.textContent = '✓ lancé';
+    setTimeout(() => { btn.textContent = '▶ pipeline'; btn.disabled = false; }, 3000);
+    setTimeout(fetchCommunes, 5000);
+  } catch(e) {
+    btn.textContent = 'erreur'; btn.disabled = false;
+  }
+}
+
+// ── State ────────────────────────────────────────────────────────────────────
+function computeAverages() {
+  const keys = ['revenu_median','prix_m2','rendement_brut','part_locataires','taux_chomage','score_final'];
+  keys.forEach(k => {
+    const vals = communes.map(c => c[k]).filter(v => v != null);
+    IDF_AVG[k] = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+  });
+}
+
+function filtered() {
+  return communes
+    .filter(c => !deptFilter || dept(c) === deptFilter)
+    .sort((a,b) => ((b[sortKey]||0) - (a[sortKey]||0)));
+}
+
+// ── Status ───────────────────────────────────────────────────────────────────
+function setStatus(state, label) {
+  const dot = document.getElementById('dot');
+  dot.className = 'status-dot ' + state;
+  document.getElementById('api-label').textContent = label;
+}
+
+function updateTopStats() {
+  const avg_rdt = communes.reduce((s,c) => s+(c.rendement_brut||0),0)/communes.length;
+  const avg_px  = communes.reduce((s,c) => s+(c.prix_m2||0),0)/communes.length;
+  document.getElementById('topbar-stats').innerHTML =
+    `<span class="tstat">rdt moy. <b>${avg_rdt.toFixed(2)}%</b></span>
+     <span class="tstat">prix moy. <b>${N(avg_px)} €/m²</b></span>
+     <span class="tstat"><b>${communes.length}</b> communes</span>`;
+}
+
+// ── Dept filter ───────────────────────────────────────────────────────────────
+function buildDeptFilter() {
+  const depts = [...new Set(communes.map(c => dept(c)))].sort();
+  const el = document.getElementById('dept-filter');
+  el.innerHTML = depts.map(d =>
+    `<button class="dfbtn" data-dept="${d}" onclick="toggleDept('${d}',this)">${d}</button>`
+  ).join('');
+}
+
+function toggleDept(d, btn) {
+  if (deptFilter === d) { deptFilter = null; btn.classList.remove('on'); }
+  else {
+    deptFilter = d;
+    document.querySelectorAll('.dfbtn').forEach(b => b.classList.remove('on'));
+    btn.classList.add('on');
+  }
+  renderSidebar();
+  const list = filtered();
+  if (list.length) showCommune(communes.indexOf(list[0]));
+}
+
+function setSort(btn) {
+  sortKey = btn.dataset.sort;
+  document.querySelectorAll('.sbtn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  renderSidebar();
+}
+
+// ── Sidebar ───────────────────────────────────────────────────────────────────
+function renderSidebar() {
+  const list = filtered();
+  document.getElementById('sidebar').innerHTML = list.map((c, i) => {
+    const idx = communes.indexOf(c);
+    const rdt = c.rendement_brut != null ? c.rendement_brut.toFixed(1)+'%' : '—%';
+    const sc  = c.score_final != null ? c.score_final.toFixed(1) : '—';
+    return `<div class="commune-item${idx===selIdx?' active':''}" onclick="showCommune(${idx})">
+      <span class="ci-rank">${i+1}</span>
+      <div class="ci-info">
+        <div class="ci-name">${c.nom}</div>
+        <div class="ci-sub">${dept(c)} · ${c.prix_m2?N(c.prix_m2)+' €/m²':'—'}</div>
+      </div>
+      <div class="ci-right">
+        <div class="ci-score ${gcs(c.score_final||0)}">${sc}</div>
+        <div class="ci-rdt ${gc(c.rendement_brut||0)}">${rdt}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Detail ────────────────────────────────────────────────────────────────────
+function showCommune(idx) {
+  selIdx = idx;
+  activeTab = 'overview';
+  renderSidebar();
+  renderDetail();
+}
+
+function renderDetail() {
+  destroyCharts();
+  const c = communes[selIdx];
+  if (!c) return;
+
+  const main = document.getElementById('main');
+  main.innerHTML = `
+    <div class="detail-header">
+      <div class="detail-name">${c.nom}</div>
+      <div class="detail-sub">Dept. ${dept(c)} · ${c.population?N(c.population)+' hab.':'—'} · code ${c.code_insee}</div>
+    </div>
+    <div class="metrics-row">
+      <div class="metric">
+        <div class="metric-label">Score inv.</div>
+        <div class="metric-value ${gcs(c.score_final||0)}">${c.score_final?.toFixed(1)||'—'}/10</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Rendement brut</div>
+        <div class="metric-value ${gc(c.rendement_brut||0)}">${c.rendement_brut!=null?c.rendement_brut.toFixed(2)+'%':'—'}</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Prix m² (DVF)</div>
+        <div class="metric-value">${c.prix_m2?N(c.prix_m2)+' €':'—'}</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Loyer est. m²</div>
+        <div class="metric-value">${c.loyer_m2_estime?c.loyer_m2_estime+' €':'—'}</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Transactions DVF</div>
+        <div class="metric-value">${c.nb_transactions_dvf||'—'}</div>
+      </div>
+    </div>
+    <div class="tabs">
+      <button class="tab${activeTab==='overview'?' on':''}" onclick="switchTab('overview')">Vue générale</button>
+      <button class="tab${activeTab==='annonces'?' on':''}" onclick="switchTab('annonces')">Annonces <span id="ann-badge-${c.code_insee}" class="ann-badge"></span></button>
+      <button class="tab${activeTab==='insee'?' on':''}" onclick="switchTab('insee')">INSEE / IRIS</button>
+      <button class="tab${activeTab==='sim'?' on':''}" onclick="switchTab('sim')">Simulateur</button>
+      <button class="tab${activeTab==='compare'?' on':''}" onclick="switchTab('compare')">Comparatif</button>
+    </div>
+    <div class="tab-content" id="tab-content"></div>
+  `;
+
+  renderTab();
+}
+
+function switchTab(tab) {
+  activeTab = tab;
+  renderDetail();
+}
+
+function renderTab() {
+  destroyCharts();
+  const c = communes[selIdx];
+  const el = document.getElementById('tab-content');
+  if (activeTab === 'overview') renderOverview(c, el);
+  else if (activeTab === 'annonces') renderAnnonces(c, el);
+  else if (activeTab === 'insee') renderInsee(c, el);
+  else if (activeTab === 'sim') renderSim(c, el);
+  else if (activeTab === 'compare') renderCompare(el);
+}
+
+// ── Overview ──────────────────────────────────────────────────────────────────
+function renderOverview(c, el) {
+  el.innerHTML = `
+    <div class="overview-grid">
+      <div class="panel">
+        <div class="panel-title">Rendement brut — toutes communes</div>
+        <div class="chart-wrap"><canvas id="bar-chart"></canvas></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Analyse multi-critères</div>
+        <div class="chart-wrap"><canvas id="radar-chart"></canvas></div>
+      </div>
+    </div>
+  `;
+  setTimeout(() => { buildBarChart(c); buildRadarChart(c); }, 30);
+}
+
+function buildBarChart(sel) {
+  const sorted = [...communes].sort((a,b)=>(b.rendement_brut||0)-(a.rendement_brut||0)).slice(0,20);
+  const ctx = document.getElementById('bar-chart');
+  if (!ctx) return;
+  barChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: sorted.map(c => c.nom),
+      datasets: [{
+        data: sorted.map(c => c.rendement_brut || 0),
+        backgroundColor: sorted.map(c =>
+          c.nom === sel.nom ? '#00e5a0' :
+          (c.rendement_brut||0) >= 5 ? 'rgba(0,229,160,.35)' :
+          (c.rendement_brut||0) >= 4 ? 'rgba(245,200,66,.35)' : 'rgba(255,77,106,.35)'
+        ),
+        borderWidth: 0,
+        borderRadius: 2,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: {display:false}, tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.x.toFixed(2)}%` } } },
+      scales: {
+        x: { beginAtZero:true, grid:{color:'rgba(255,255,255,.04)'}, ticks:{color:'#4e5766',font:{size:10},callback:v=>v+'%'} },
+        y: { grid:{display:false}, ticks:{color:'#8891a0',font:{size:10}} }
+      }
+    }
+  });
+}
+
+function buildRadarChart(c) {
+  const radar = c.radar || {};
+  const labels = ['Rendement','Transports','Tension loc.','Solvabilité','Access. prix','Dynamisme'];
+  const vals = ['rendement','transports','tension_locative','solvabilite_locataires','accessibilite_prix','dynamisme_marche'].map(k => radar[k] || 0);
+
+  // IDF average from all communes radar
+  const idfVals = ['rendement','transports','tension_locative','solvabilite_locataires','accessibilite_prix','dynamisme_marche'].map(k => {
+    const vs = communes.map(cx => (cx.radar||{})[k]||0);
+    return vs.reduce((a,b)=>a+b,0)/vs.length;
+  });
+
+  const ctx = document.getElementById('radar-chart');
+  if (!ctx) return;
+  radarChart = new Chart(ctx, {
+    type: 'radar',
+    data: {
+      labels,
+      datasets: [
+        { label: c.nom, data: vals, backgroundColor:'rgba(0,229,160,.1)', borderColor:'#00e5a0', pointBackgroundColor:'#00e5a0', pointRadius:3, borderWidth:1.5 },
+        { label: 'Moy. IDF', data: idfVals, backgroundColor:'rgba(255,255,255,.03)', borderColor:'rgba(255,255,255,.2)', borderDash:[4,3], pointBackgroundColor:'rgba(255,255,255,.2)', pointRadius:2, borderWidth:1 }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: { r: {
+        min:0, max:10,
+        ticks:{stepSize:2, font:{size:9}, color:'#4e5766', backdropColor:'transparent'},
+        grid:{color:'rgba(255,255,255,.07)'},
+        angleLines:{color:'rgba(255,255,255,.07)'},
+        pointLabels:{font:{size:10}, color:'#8891a0'}
+      }},
+      plugins: { legend:{display:false}, tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${ctx.parsed.r.toFixed(1)}/10`}} }
+    }
+  });
+}
+
+// ── INSEE / IRIS ──────────────────────────────────────────────────────────────
+async function renderInsee(c, el) {
+  el.innerHTML = `<div class="loading-box"><div class="spinner"></div>Chargement des données INSEE…</div>`;
+
+  const iris = await fetchIris(c.code_insee);
+
+  function delta(val, avg, higherIsBetter=true) {
+    if (val == null || avg == null) return '';
+    const d = val - avg, good = higherIsBetter ? d >= 0 : d <= 0;
+    const cls = good ? 'g' : 'r';
+    const sign = d >= 0 ? '+' : '';
+    return `<div class="insee-delta ${cls}">${sign}${Math.round(d)} vs IDF</div>`;
+  }
+
+  el.innerHTML = `
+    <div class="section-title" style="margin-bottom:10px">Indicateurs socio-économiques</div>
+    <div class="insee-grid">
+      <div class="insee-card">
+        <div class="insee-label">Revenu médian</div>
+        <div class="insee-value">${c.revenu_median ? N(c.revenu_median)+' €' : '—'}</div>
+        ${delta(c.revenu_median, IDF_AVG.revenu_median)}
+      </div>
+      <div class="insee-card">
+        <div class="insee-label">Part locataires</div>
+        <div class="insee-value">${c.part_locataires != null ? c.part_locataires+'%' : '—'}</div>
+        ${delta(c.part_locataires, IDF_AVG.part_locataires)}
+      </div>
+      <div class="insee-card">
+        <div class="insee-label">Taux vacance loc.</div>
+        <div class="insee-value">${c.taux_vacance != null ? c.taux_vacance+'%' : '—'}</div>
+        ${delta(c.taux_vacance, null)}
+      </div>
+      <div class="insee-card">
+        <div class="insee-label">Évol. prix 1 an</div>
+        <div class="insee-value ${c.evolution_annuelle_pct>0?'g':c.evolution_annuelle_pct<0?'r':''}">${c.evolution_annuelle_pct!=null?(c.evolution_annuelle_pct>0?'+':'')+c.evolution_annuelle_pct+'%':'—'}</div>
+      </div>
+      <div class="insee-card">
+        <div class="insee-label">Part &lt; 30 ans</div>
+        <div class="insee-value">${c.part_moins_30 != null ? c.part_moins_30+'%' : '—'}</div>
+        ${delta(c.part_moins_30, 35)}
+      </div>
+      <div class="insee-card">
+        <div class="insee-label">Score transports</div>
+        <div class="insee-value ${gc(c.score_transports||0)}">${c.score_transports?.toFixed(1)||'—'}/10</div>
+      </div>
+    </div>
+
+    <div class="section-title">Quartiers IRIS — granularité sub-communale</div>
+    ${iris.length ? `
+    <table class="iris-table">
+      <thead><tr>
+        <th>Quartier (IRIS)</th>
+        <th>Revenu médian</th>
+        <th>Taux pauvreté</th>
+        <th>Ménages</th>
+        <th>Score</th>
+      </tr></thead>
+      <tbody>
+        ${iris.map(i => {
+          const sc = Math.min(10, Math.max(0, ((i.revenu_median||20000)-10000)/35000*10)).toFixed(1);
+          const bclr = sc>=7?'#00e5a0':sc>=5?'#f5c842':'#ff4d6a';
+          return `<tr>
+            <td class="iris-name">${i.nom_iris}</td>
+            <td>${i.revenu_median ? N(i.revenu_median)+' €' : '—'}</td>
+            <td>${i.taux_pauvrete != null ? i.taux_pauvrete+'%' : '—'}</td>
+            <td>${i.population_menages ? N(i.population_menages) : '—'}</td>
+            <td><div class="score-bar-wrap">
+              <div class="score-bar" style="width:${Math.round(sc/10*50)}px;background:${bclr}"></div>
+              <span style="font-family:var(--mono);font-size:11px;color:${bclr}">${sc}</span>
+            </div></td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+    <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-top:10px">
+      Source : INSEE Filosofi IRIS · RP 2020 · DVF data.gouv.fr
+    </div>` : `<div class="empty-iris">
+      Données IRIS non encore collectées.<br>
+      Relancez <code style="color:var(--accent)">python main.py pipeline</code> pour les charger.
+    </div>`}
+  `;
+}
+
+// ── Simulateur ────────────────────────────────────────────────────────────────
+function renderSim(c, el) {
+  const defBudget = c.prix_m2 ? Math.round(c.prix_m2 * 50 / 5000) * 5000 : 200000;
+  const defLoyer  = c.loyer_m2_estime ? Math.round(c.loyer_m2_estime * 50) : 800;
+
+  el.innerHTML = `
+    <div class="sim-grid">
+      <div class="sim-controls">
+        <div class="section-title">Paramètres</div>
+        <div class="sim-row">
+          <div class="sim-label">Budget d'achat <b id="sv-budget">${N(defBudget)} €</b></div>
+          <input type="range" id="sl-budget" min="50000" max="600000" step="5000" value="${defBudget}" oninput="updateSim()">
+        </div>
+        <div class="sim-row">
+          <div class="sim-label">Loyer mensuel estimé <b id="sv-loyer">${N(defLoyer)} €</b></div>
+          <input type="range" id="sl-loyer" min="300" max="3000" step="25" value="${defLoyer}" oninput="updateSim()">
+        </div>
+        <div class="sim-row">
+          <div class="sim-label">Charges (vacance, taxe, copro) <b id="sv-charges">25%</b></div>
+          <input type="range" id="sl-charges" min="5" max="45" step="1" value="25" oninput="updateSim()">
+        </div>
+        <div class="sim-row">
+          <div class="sim-label">Durée de détention <b id="sv-duree">10 ans</b></div>
+          <input type="range" id="sl-duree" min="1" max="30" step="1" value="10" oninput="updateSim()">
+        </div>
+        <div style="margin-top:8px;font-family:var(--mono);font-size:10px;color:var(--text3)">
+          Frais de notaire estimés à 8% (ancien)<br>
+          Prix m² référence : ${c.prix_m2?N(c.prix_m2)+' €/m²':'données manquantes'}
+        </div>
+      </div>
+      <div class="sim-results" id="sim-results"></div>
+    </div>
+  `;
+  updateSim(c);
+}
+
+function updateSim() {
+  const c = communes[selIdx];
+  const budget  = +document.getElementById('sl-budget').value;
+  const loyer   = +document.getElementById('sl-loyer').value;
+  const charges = +document.getElementById('sl-charges').value;
+  const duree   = +document.getElementById('sl-duree').value;
+
+  document.getElementById('sv-budget').textContent   = N(budget) + ' €';
+  document.getElementById('sv-loyer').textContent    = N(loyer) + ' €';
+  document.getElementById('sv-charges').textContent  = charges + '%';
+  document.getElementById('sv-duree').textContent    = duree + ' ans';
+
+  const frais   = Math.round(budget * 0.08);
+  const total   = budget + frais;
+  const surface = c.prix_m2 ? Math.round(budget / c.prix_m2) : null;
+  const loyerAn = loyer * 12;
+  const rdt_b   = +((loyerAn / total) * 100).toFixed(2);
+  const loyerNet = Math.round(loyerAn * (1 - charges / 100));
+  const rdt_n   = +((loyerNet / total) * 100).toFixed(2);
+  const cashflow = Math.round(loyerNet / 12);
+  const gainTotal = Math.round(loyerNet * duree);
+
+  const el = document.getElementById('sim-results');
+  if (!el) return;
+
+  function row(label, value, cls='') {
+    return `<div class="sr-item">
+      <div class="sr-label">${label}</div>
+      <div class="sr-value ${cls}">${value}</div>
+    </div>`;
+  }
+
+  el.innerHTML =
+    row('Surface estimée',   surface ? surface + ' m²' : '—') +
+    row('Rendement brut',    rdt_b.toFixed(2) + '%', gc(rdt_b)) +
+    row('Rendement net',     rdt_n.toFixed(2) + '%', gc(rdt_n)) +
+    row('Coût total',        N(total) + ' €') +
+    row('Frais notaire',     N(frais) + ' €') +
+    row('Cashflow net/mois', (cashflow>=0?'+':'')+N(cashflow)+' €', cashflow>=0?'g':'r') +
+    row('Gain locatif '+duree+'ans', N(gainTotal)+' €', gainTotal>0?'g':'r');
+}
+
+// ── Comparatif ────────────────────────────────────────────────────────────────
+function renderCompare(el) {
+  const list = filtered().slice(0, 50);
+  const sel = communes[selIdx];
+
+  el.innerHTML = `
+    <div class="section-title">Comparatif — ${list.length} communes${deptFilter?' · dept '+deptFilter:''}</div>
+    <table class="compare-table" id="cmp-table">
+      <thead><tr>
+        <th>#</th>
+        <th>Commune</th>
+        <th onclick="setSort(document.querySelector('[data-sort=score_final]'));renderTab()">Score ↕</th>
+        <th onclick="setSort(document.querySelector('[data-sort=rendement_brut]'));renderTab()">Rdt brut ↕</th>
+        <th onclick="setSort(document.querySelector('[data-sort=prix_m2]'));renderTab()">Prix m² ↕</th>
+        <th>Loyer m²</th>
+        <th onclick="setSort(document.querySelector('[data-sort=revenu_median]'));renderTab()">Rev. méd. ↕</th>
+        <th>Loc. %</th>
+        <th>Transport</th>
+        <th>Évol. 1an</th>
+      </tr></thead>
+      <tbody>
+        ${list.map((c, i) => {
+          const hl = c.nom === sel.nom;
+          const d = dept(c);
+          return `<tr class="${hl?'hl':''}" onclick="showCommune(${communes.indexOf(c)})">
+            <td style="color:var(--text3)">${i+1}</td>
+            <td><span class="cn">${c.nom}</span><span class="dept-tag">${d}</span></td>
+            <td class="${gcs(c.score_final||0)}">${c.score_final?.toFixed(1)||'—'}</td>
+            <td class="${gc(c.rendement_brut||0)}">${c.rendement_brut!=null?c.rendement_brut.toFixed(2)+'%':'—'}</td>
+            <td>${c.prix_m2?N(c.prix_m2)+' €':'—'}</td>
+            <td>${c.loyer_m2_estime?c.loyer_m2_estime+' €':'—'}</td>
+            <td>${c.revenu_median?N(c.revenu_median)+' €':'—'}</td>
+            <td>${c.part_locataires!=null?c.part_locataires+'%':'—'}</td>
+            <td class="${gc(c.score_transports||0)}">${c.score_transports?.toFixed(1)||'—'}</td>
+            <td class="${c.evolution_annuelle_pct>0?'g':c.evolution_annuelle_pct<0?'r':''}">${c.evolution_annuelle_pct!=null?(c.evolution_annuelle_pct>0?'+':'')+c.evolution_annuelle_pct+'%':'—'}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+// ── Error / No data ───────────────────────────────────────────────────────────
+function showApiError(e) {
+  document.getElementById('main').innerHTML = `
+    <div class="error-box">
+      <div style="font-size:14px;margin-bottom:8px;color:var(--text)">API non accessible</div>
+      Lancez d'abord le backend dans un terminal :<br><br>
+      <span style="color:var(--accent)">cd D:\\Developpement\\PERSO\\immo_idf</span><br>
+      <span style="color:var(--accent)">python main.py api</span><br><br>
+      Puis rechargez cette page.<br><br>
+      <span style="color:var(--text3);font-size:10px">Erreur : ${e.message}</span>
+    </div>`;
+}
+
+function showNoData() {
+  document.getElementById('main').innerHTML = `
+    <div class="error-box">
+      <div style="font-size:14px;margin-bottom:8px;color:var(--text)">Aucune donnée disponible</div>
+      Lancez le pipeline pour collecter les données :<br><br>
+      <span style="color:var(--accent)">python main.py pipeline</span><br><br>
+      Puis relancez l'API :<br>
+      <span style="color:var(--accent)">python main.py api</span>
+    </div>`;
+}
+
+// ── Cleanup ───────────────────────────────────────────────────────────────────
+function destroyCharts() {
+  if (barChart)   { barChart.destroy();   barChart = null; }
+  if (radarChart) { radarChart.destroy(); radarChart = null; }
+}
+
+
+// ── Annonces ─────────────────────────────────────────────────────────────────
+let annFiltres = { type_bien:'', surface_min:'', surface_max:'', prix_max:'', source:'', sous_cote:false };
+let annStats = null;
+
+async function renderAnnonces(c, el) {
+  el.innerHTML = `<div class="loading-box"><div class="spinner"></div>Chargement des annonces…</div>`;
+  await loadAnnStats();
+  const annonces = await fetchAnnonces(c.code_insee);
+  renderAnnoncesUI(c, el, annonces);
+}
+
+async function fetchAnnonces(code) {
+  const p = new URLSearchParams({ code_commune: code, limit: 200 });
+  if (annFiltres.type_bien)  p.set('type_bien', annFiltres.type_bien);
+  if (annFiltres.surface_min) p.set('surface_min', annFiltres.surface_min);
+  if (annFiltres.surface_max) p.set('surface_max', annFiltres.surface_max);
+  if (annFiltres.prix_max)    p.set('prix_max', annFiltres.prix_max);
+  if (annFiltres.source)      p.set('source', annFiltres.source);
+  if (annFiltres.sous_cote)   p.set('sous_cote_only', 'true');
+  try {
+    const r = await fetch(`${API}/annonces?${p}`);
+    return await r.json();
+  } catch { return []; }
+}
+
+async function loadAnnStats() {
+  try {
+    const r = await fetch(`${API}/annonces/stats`);
+    annStats = await r.json();
+  } catch { annStats = null; }
+}
+
+function renderAnnoncesUI(c, el, annonces) {
+  const stats = annStats;
+  const statsHtml = stats ? `
+    <div class="ann-stats">
+      <span>Total IDF : <span class="ann-stat-v">${stats.total}</span></span>
+      <span>Sous-cotées : <span class="ann-stat-v" style="color:var(--green)">${stats.sous_cote}</span></span>
+      <span>PAP : <span class="ann-stat-v">${stats.par_source?.pap||0}</span></span>
+      <span>LBC : <span class="ann-stat-v">${stats.par_source?.leboncoin||0}</span></span>
+      ${stats.dernier_scraping ? `<span>Dernier scraping : <span class="ann-stat-v">${stats.dernier_scraping.slice(0,16).replace('T',' ')}</span></span>` : ''}
+    </div>` : '';
+
+  el.innerHTML = `
+    ${statsHtml}
+    <div class="ann-filters">
+      <div class="ann-filter-group">
+        <span class="ann-filter-label">Type</span>
+        <select id="f-type" onchange="setAnnFilter('type_bien',this.value)">
+          <option value="">Tous</option>
+          <option value="appartement" ${annFiltres.type_bien==='appartement'?'selected':''}>Appartement</option>
+          <option value="maison" ${annFiltres.type_bien==='maison'?'selected':''}>Maison</option>
+        </select>
+      </div>
+      <div class="ann-filter-group">
+        <span class="ann-filter-label">Surface min (m²)</span>
+        <input type="number" id="f-smin" placeholder="20" value="${annFiltres.surface_min}" min="0" max="500"
+               onchange="setAnnFilter('surface_min',this.value)">
+      </div>
+      <div class="ann-filter-group">
+        <span class="ann-filter-label">Surface max (m²)</span>
+        <input type="number" id="f-smax" placeholder="ex : 120" value="${annFiltres.surface_max}" min="0" max="500"
+               onchange="setAnnFilter('surface_max',this.value)">
+      </div>
+      <div class="ann-filter-group">
+        <span class="ann-filter-label">Prix max (€)</span>
+        <input type="number" id="f-pmax" placeholder="500000" value="${annFiltres.prix_max}" step="10000"
+               onchange="setAnnFilter('prix_max',this.value)">
+      </div>
+      <div class="ann-filter-group">
+        <span class="ann-filter-label">Source</span>
+        <select id="f-src" onchange="setAnnFilter('source',this.value)">
+          <option value="">Toutes</option>
+          <option value="pap" ${annFiltres.source==='pap'?'selected':''}>PAP</option>
+          <option value="leboncoin" ${annFiltres.source==='leboncoin'?'selected':''}>LeBonCoin</option>
+        </select>
+      </div>
+      <button class="ann-sous-cote-toggle${annFiltres.sous_cote?' on':''}"
+              onclick="toggleSousCote()">🟢 Sous-cotées</button>
+      <button class="ann-scrape-btn" id="scrape-btn" onclick="triggerScraping()">▶ Scraper maintenant</button>
+    </div>
+    <div id="ann-list">
+      ${annonces.length === 0
+        ? `<div class="ann-empty">
+            Aucune annonce${stats&&stats.total===0?' — lancez le scraping ci-dessus':''}.<br>
+            <span style="font-size:10px;color:var(--text3)">Cliquez sur "▶ Scraper maintenant" pour récupérer les annonces PAP et LeBonCoin.</span>
+           </div>`
+        : annonces.map(a => annCard(a, c.prix_m2)).join('')
+      }
+    </div>
+  `;
+}
+
+function annCard(a, prixRef) {
+  const srcCls = a.source === 'pap' ? 'ann-badge-pap' : 'ann-badge-lbc';
+  const srcLabel = a.source === 'pap' ? 'PAP' : 'LBC';
+  const delta = a.delta_dvf_pct;
+  const deltaCls = delta !== null ? (delta <= -10 ? 'vg' : delta >= 15 ? 'vr' : 'vy') : '';
+  const deltaStr = delta !== null ? `${delta > 0 ? '+' : ''}${delta}% vs DVF` : '— vs DVF';
+  const surf = a.surface ? `${a.surface} m²` : '— m²';
+  const pieces = a.nb_pieces ? `${a.nb_pieces} pièce${a.nb_pieces>1?'s':''}` : '';
+  const rdt = a.rendement_estime ? `${a.rendement_estime}% brut` : '';
+
+  return `<div class="ann-card">
+    <span class="ann-badge-src ${srcCls}">${srcLabel}</span>
+    <div class="ann-info">
+      <div class="ann-titre"><a href="${a.url}" target="_blank" style="color:inherit;text-decoration:none">${a.titre}</a></div>
+      <div class="ann-sub">${surf}${pieces?' · '+pieces:''}${rdt?' · '+rdt:''} · ${a.nom_commune}</div>
+    </div>
+    <div class="ann-right">
+      <div class="ann-prix">${a.prix ? N(a.prix)+' €' : '—'}</div>
+      <div class="ann-delta ${deltaCls}">${deltaStr}</div>
+      ${a.sous_cote ? '<div style="font-size:9px;color:var(--green);font-family:var(--mono)">● sous-coté</div>' : ''}
+    </div>
+  </div>`;
+}
+
+async function setAnnFilter(key, val) {
+  annFiltres[key] = val;
+  const c = communes[selIdx];
+  const el = document.getElementById('tab-content');
+  if (el && activeTab === 'annonces') {
+    const anns = await fetchAnnonces(c.code_insee);
+    const listEl = document.getElementById('ann-list');
+    if (listEl) listEl.innerHTML = anns.length === 0
+      ? `<div class="ann-empty">Aucune annonce avec ces filtres.</div>`
+      : anns.map(a => annCard(a, c.prix_m2)).join('');
+  }
+}
+
+function toggleSousCote() {
+  annFiltres.sous_cote = !annFiltres.sous_cote;
+  const c = communes[selIdx];
+  const el = document.getElementById('tab-content');
+  if (el) renderAnnonces(c, el);
+}
+
+async function triggerScraping() {
+  const btn = document.getElementById('scrape-btn');
+  if (!btn) return;
+  btn.disabled = true; btn.textContent = '⏳ en cours…';
+  try {
+    await fetch(`${API}/annonces/scrape`, { method:'POST', headers:{'Content-Type':'application/json'}, body:'{"force":true}' });
+    btn.textContent = '✓ lancé — revenez dans 2 min';
+    setTimeout(() => { if(btn){btn.textContent='▶ Scraper maintenant';btn.disabled=false;} }, 120000);
+  } catch(e) {
+    btn.textContent = 'Erreur'; btn.disabled = false;
+  }
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+fetchCommunes();
+</script>
+</body>
+</html>

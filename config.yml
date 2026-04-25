@@ -1,0 +1,188 @@
+# ─────────────────────────────────────────────────────────────
+#  IMMO·IDF — Configuration des communes à analyser
+#  Éditez ce fichier pour ajouter ou retirer des communes.
+#  Utilisez `python main.py add-commune --nom "Vincennes"` pour
+#  chercher et ajouter une commune automatiquement.
+# ─────────────────────────────────────────────────────────────
+
+communes:
+  # ── Essonne (91) ─────────────────────────────────────────────
+  - code_insee: "91377"
+    nom: "Massy"
+    actif: true
+
+  - code_insee: "91477"
+    nom: "Palaiseau"
+    actif: true
+
+  - code_insee: "91692"
+    nom: "Les Ulis"
+    actif: true
+
+  - code_insee: "91272"
+    nom: "Gif-sur-Yvette"
+    actif: true
+
+  - code_insee: "91471"
+    nom: "Orsay"
+    actif: true
+
+  - code_insee: "91345"
+    nom: "Longjumeau"
+    actif: true
+
+  - code_insee: "91149"
+    nom: "Chilly-Mazarin"
+    actif: true
+
+  - code_insee: "91589"
+    nom: "Savigny-sur-Orge"
+    actif: true
+
+  - code_insee: "91323"
+    nom: "Juvisy-sur-Orge"
+    actif: true
+
+  - code_insee: "91687"
+    nom: "Viry-Châtillon"
+    actif: true
+
+  - code_insee: "91027"
+    nom: "Athis-Mons"
+    actif: true
+
+  - code_insee: "91432"
+    nom: "Morangis"
+    actif: true
+
+  - code_insee: "91228"
+    nom: "Évry-Courcouronnes"
+    actif: true
+
+  - code_insee: "91182"
+    nom: "Corbeil-Essonnes"
+    actif: true
+
+  # ── Hauts-de-Seine (92) ──────────────────────────────────────
+  - code_insee: "92002"
+    nom: "Antony"
+    actif: true
+
+  - code_insee: "92023"
+    nom: "Clamart"
+    actif: true
+
+  - code_insee: "92017"
+    nom: "Châtenay-Malabry"
+    actif: true
+
+  - code_insee: "92060"
+    nom: "Le Plessis-Robinson"
+    actif: true
+
+  - code_insee: "92071"
+    nom: "Sceaux"
+    actif: true
+
+  - code_insee: "92007"
+    nom: "Bagneux"
+    actif: true
+
+  - code_insee: "92032"
+    nom: "Fontenay-aux-Roses"
+    actif: true
+
+  # ── Val-de-Marne (94) ────────────────────────────────────────
+  - code_insee: "94034"
+    nom: "Fresnes"
+    actif: true
+
+  - code_insee: "94076"
+    nom: "Villejuif"
+    actif: true
+
+  - code_insee: "94038"
+    nom: "L'Haÿ-les-Roses"
+    actif: true
+
+  - code_insee: "94017"
+    nom: "Chevilly-Larue"
+    actif: true
+
+  - code_insee: "94073"
+    nom: "Thiais"
+    actif: true
+
+  - code_insee: "94022"
+    nom: "Choisy-le-Roi"
+    actif: true
+
+  - code_insee: "94055"
+    nom: "Orly"
+    actif: true
+
+  - code_insee: "94080"
+    nom: "Vitry-sur-Seine"
+    actif: true
+
+  # ── Yvelines (78) ────────────────────────────────────────────
+  - code_insee: "78686"
+    nom: "Vélizy-Villacoublay"
+    actif: true
+
+  - code_insee: "78297"
+    nom: "Guyancourt"
+    actif: true
+
+  - code_insee: "78208"
+    nom: "Élancourt"
+    actif: true
+
+  - code_insee: "78621"
+    nom: "Trappes"
+    actif: true
+
+  - code_insee: "78430"
+    nom: "Montigny-le-Bretonneux"
+    actif: true
+
+# ─────────────────────────────────────────────────────────────
+#  Paramètres du pipeline
+# ─────────────────────────────────────────────────────────────
+parametres:
+  surface_reference_m2: 50       # Surface de référence pour les calculs de rendement
+  charges_locatives_pct: 25.0    # % charges estimées (taxe foncière, copro, vacance)
+  frais_acquisition_pct: 8.0     # % frais de notaire (immobilier ancien)
+  cache_ttl_jours: 7             # Durée de validité du cache (jours)
+  annees_dvf: 2                  # Fenêtre historique DVF pour le calcul du prix m²
+  rayon_transports_m: 800        # Rayon en mètres pour le comptage des arrêts TC
+
+# ─────────────────────────────────────────────────────────────
+#  Pondération du score investisseur (doit sommer à 1.0)
+# ─────────────────────────────────────────────────────────────
+scoring:
+  poids_rendement: 0.50           # Rendement brut estimé
+  poids_tension_locative: 0.30    # Part de locataires (proxy tension)
+  poids_transports: 0.20          # Score accessibilité TC
+
+# ─────────────────────────────────────────────────────────────
+#  Scraping des annonces immobilières
+# ─────────────────────────────────────────────────────────────
+annonces:
+  actif: true
+  interval_heures: 12           # Fréquence de scraping
+  sources:
+    - pap
+    - leboncoin
+
+  # Filtres par défaut (modifiables aussi depuis le dashboard)
+  types:                        # appartement | maison | les deux
+    - appartement
+    - maison
+  surface_min_m2: 20
+  surface_max_m2: 120           # null = pas de limite
+  prix_max: 500000
+  nb_pieces_min: 1
+
+  # Seuil d'alerte "sous-coté" (delta vs prix DVF commune)
+  seuil_sous_cote_pct: -10      # -10% = annonce 10% sous le prix moyen DVF
