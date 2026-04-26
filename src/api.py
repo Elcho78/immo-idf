@@ -18,6 +18,8 @@ from typing import Optional
 
 import httpx
 from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -27,7 +29,50 @@ from .storage import Storage
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="IMMO·IDF", version="1.0.0", docs_url="/docs")
+
+# ── Scheduler (remplace systemd timers sur Railway) ──────────────────────────
+
+from contextlib import asynccontextmanager
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.interval import IntervalTrigger
+
+scheduler = AsyncIOScheduler()
+
+def _scheduled_scraping():
+    try:
+        from .sources.annonces import run_scraping
+        cfg = _config()
+        run_scraping(cfg)
+    except Exception as e:
+        logger.error(f"Scheduled scraping : {e}", exc_info=True)
+
+def _scheduled_pipeline():
+    try:
+        from .pipeline import Pipeline
+        cfg = _config()
+        Pipeline(cfg).run()
+    except Exception as e:
+        logger.error(f"Scheduled pipeline : {e}", exc_info=True)
+
+@asynccontextmanager
+async def lifespan(app):
+    # Scraping LBC toutes les 12h
+    scheduler.add_job(_scheduled_scraping, IntervalTrigger(hours=12),
+                      id="scraping", replace_existing=True)
+    # Pipeline DVF toutes les semaines
+    scheduler.add_job(_scheduled_pipeline, IntervalTrigger(weeks=1),
+                      id="pipeline", replace_existing=True)
+    scheduler.start()
+    logger.info("Scheduler démarré (scraping 12h, pipeline 7j)")
+    yield
+    scheduler.shutdown()
+
+app = FastAPI(title="IMMO·IDF", version="1.0.0", docs_url="/docs", lifespan=lifespan)
+
+# Servir le dashboard HTML
+@app.get("/")
+async def root():
+    return FileResponse("dashboard.html")
 
 app.add_middleware(
     CORSMiddleware,
