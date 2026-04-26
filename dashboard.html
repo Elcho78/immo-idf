@@ -560,7 +560,10 @@
 </div>
 
 <script>
-const API = 'http://localhost:8000';
+// Auto-détecte : localhost en dev, même origine en prod
+const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? 'http://localhost:8000'
+  : window.location.origin;
 let communes = [], selIdx = 0, sortKey = 'score_final', deptFilter = null;
 let barChart = null, radarChart = null;
 let activeTab = 'overview';
