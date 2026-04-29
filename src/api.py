@@ -245,6 +245,9 @@ def get_annonces(
     surface_min: float = None,
     surface_max: float = None,
     prix_max: int = None,
+    prix_min: int = None,
+    nb_pieces_min: int = None,
+    quartier: str = None,
     sous_cote_only: bool = False,
     limit: int = 200,
 ):
@@ -256,6 +259,9 @@ def get_annonces(
         surface_min=surface_min,
         surface_max=surface_max,
         prix_max=prix_max,
+        prix_min=prix_min,
+        nb_pieces_min=nb_pieces_min,
+        quartier=quartier,
         sous_cote_only=sous_cote_only,
         limit=limit,
     )

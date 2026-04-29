@@ -200,6 +200,17 @@ def _parse_ad(ad: dict, code_insee: str, nom_commune: str, type_map_inv: dict) -
 
     titre = ad.get("subject", "Annonce LeBonCoin")[:200]
 
+    # Images
+    images = ad.get("images", {})
+    img_urls = images.get("urls_large", images.get("urls", []))
+    image_url = img_urls[0] if img_urls else None
+
+    # Localisation précise
+    loc = ad.get("location", {})
+    city = loc.get("city", nom_commune)
+    zipcode = loc.get("zipcode", "")
+    quartier = loc.get("city_label", city)
+
     return {
         "id": ann_id,
         "source": "leboncoin",
@@ -212,6 +223,10 @@ def _parse_ad(ad: dict, code_insee: str, nom_commune: str, type_map_inv: dict) -
         "type_bien": type_bien,
         "nb_pieces": nb_pieces,
         "url": url,
+        "image_url": image_url,
+        "quartier": quartier,
+        "ville_lbc": city,
+        "code_postal": zipcode,
         "date_scraping": _now(),
         "actif": True,
     }

@@ -1098,7 +1098,7 @@ function destroyCharts() {
 
 
 // ── Annonces ─────────────────────────────────────────────────────────────────
-let annFiltres = { type_bien:'', surface_min:'', surface_max:'', prix_max:'', source:'', sous_cote:false };
+let annFiltres = { type_bien:'', surface_min:'', surface_max:'', prix_max:'', prix_min:'', nb_pieces_min:'', quartier:'', source:'', sous_cote:false };
 let annStats = null;
 
 async function renderAnnonces(c, el) {
@@ -1110,12 +1110,15 @@ async function renderAnnonces(c, el) {
 
 async function fetchAnnonces(code) {
   const p = new URLSearchParams({ code_commune: code, limit: 200 });
-  if (annFiltres.type_bien)  p.set('type_bien', annFiltres.type_bien);
-  if (annFiltres.surface_min) p.set('surface_min', annFiltres.surface_min);
-  if (annFiltres.surface_max) p.set('surface_max', annFiltres.surface_max);
-  if (annFiltres.prix_max)    p.set('prix_max', annFiltres.prix_max);
-  if (annFiltres.source)      p.set('source', annFiltres.source);
-  if (annFiltres.sous_cote)   p.set('sous_cote_only', 'true');
+  if (annFiltres.type_bien)     p.set('type_bien', annFiltres.type_bien);
+  if (annFiltres.surface_min)   p.set('surface_min', annFiltres.surface_min);
+  if (annFiltres.surface_max)   p.set('surface_max', annFiltres.surface_max);
+  if (annFiltres.prix_max)      p.set('prix_max', annFiltres.prix_max);
+  if (annFiltres.prix_min)      p.set('prix_min', annFiltres.prix_min);
+  if (annFiltres.nb_pieces_min) p.set('nb_pieces_min', annFiltres.nb_pieces_min);
+  if (annFiltres.quartier)      p.set('quartier', annFiltres.quartier);
+  if (annFiltres.source)        p.set('source', annFiltres.source);
+  if (annFiltres.sous_cote)     p.set('sous_cote_only', 'true');
   try {
     const r = await fetch(`${API}/annonces?${p}`);
     return await r.json();
@@ -1152,27 +1155,40 @@ function renderAnnoncesUI(c, el, annonces) {
         </select>
       </div>
       <div class="ann-filter-group">
+        <span class="ann-filter-label">Pièces min</span>
+        <select id="f-pieces" onchange="setAnnFilter('nb_pieces_min',this.value)">
+          <option value="">Tous</option>
+          <option value="1" ${annFiltres.nb_pieces_min==='1'?'selected':''}>1+</option>
+          <option value="2" ${annFiltres.nb_pieces_min==='2'?'selected':''}>2+</option>
+          <option value="3" ${annFiltres.nb_pieces_min==='3'?'selected':''}>3+</option>
+          <option value="4" ${annFiltres.nb_pieces_min==='4'?'selected':''}>4+</option>
+          <option value="5" ${annFiltres.nb_pieces_min==='5'?'selected':''}>5+</option>
+        </select>
+      </div>
+      <div class="ann-filter-group">
         <span class="ann-filter-label">Surface min (m²)</span>
-        <input type="number" id="f-smin" placeholder="20" value="${annFiltres.surface_min}" min="0" max="500"
+        <input type="number" id="f-smin" placeholder="ex: 30" value="${annFiltres.surface_min}" min="0" max="500"
                onchange="setAnnFilter('surface_min',this.value)">
       </div>
       <div class="ann-filter-group">
         <span class="ann-filter-label">Surface max (m²)</span>
-        <input type="number" id="f-smax" placeholder="ex : 120" value="${annFiltres.surface_max}" min="0" max="500"
+        <input type="number" id="f-smax" placeholder="ex: 120" value="${annFiltres.surface_max}" min="0" max="500"
                onchange="setAnnFilter('surface_max',this.value)">
       </div>
       <div class="ann-filter-group">
+        <span class="ann-filter-label">Prix min (€)</span>
+        <input type="number" id="f-pmin" placeholder="ex: 100000" value="${annFiltres.prix_min}" step="10000"
+               onchange="setAnnFilter('prix_min',this.value)">
+      </div>
+      <div class="ann-filter-group">
         <span class="ann-filter-label">Prix max (€)</span>
-        <input type="number" id="f-pmax" placeholder="500000" value="${annFiltres.prix_max}" step="10000"
+        <input type="number" id="f-pmax" placeholder="ex: 400000" value="${annFiltres.prix_max}" step="10000"
                onchange="setAnnFilter('prix_max',this.value)">
       </div>
       <div class="ann-filter-group">
-        <span class="ann-filter-label">Source</span>
-        <select id="f-src" onchange="setAnnFilter('source',this.value)">
-          <option value="">Toutes</option>
-          <option value="pap" ${annFiltres.source==='pap'?'selected':''}>PAP</option>
-          <option value="leboncoin" ${annFiltres.source==='leboncoin'?'selected':''}>LeBonCoin</option>
-        </select>
+        <span class="ann-filter-label">Quartier</span>
+        <input type="text" id="f-qrt" placeholder="ex: Centre" value="${annFiltres.quartier||''}"
+               oninput="setAnnFilter('quartier',this.value)" style="width:100px">
       </div>
       <button class="ann-sous-cote-toggle${annFiltres.sous_cote?' on':''}"
               onclick="toggleSousCote()">🟢 Sous-cotées</button>
@@ -1200,11 +1216,17 @@ function annCard(a, prixRef) {
   const pieces = a.nb_pieces ? `${a.nb_pieces} pièce${a.nb_pieces>1?'s':''}` : '';
   const rdt = a.rendement_estime ? `${a.rendement_estime}% brut` : '';
 
+  const imgHtml = a.image_url
+    ? `<img src="${a.image_url}" alt="" style="width:72px;height:54px;object-fit:cover;border-radius:4px;flex-shrink:0;border:1px solid var(--border)">`
+    : `<div style="width:72px;height:54px;background:var(--bg3);border-radius:4px;flex-shrink:0;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:18px">🏠</div>`;
+  const quartierStr = a.quartier && a.quartier !== a.nom_commune ? ` · ${a.quartier}` : '';
   return `<div class="ann-card">
-    <span class="ann-badge-src ${srcCls}">${srcLabel}</span>
+    ${imgHtml}
+    <span class="ann-badge-src ${srcCls}" style="align-self:flex-start">${srcLabel}</span>
     <div class="ann-info">
       <div class="ann-titre"><a href="${a.url}" target="_blank" style="color:inherit;text-decoration:none">${a.titre}</a></div>
-      <div class="ann-sub">${surf}${pieces?' · '+pieces:''}${rdt?' · '+rdt:''} · ${a.nom_commune}</div>
+      <div class="ann-sub">${surf}${pieces?' · '+pieces:''}${rdt?' · '+rdt:''} · ${a.nom_commune}${quartierStr}</div>
+      ${a.code_postal ? `<div style="font-size:10px;color:var(--text3);font-family:var(--mono)">${a.code_postal}</div>` : ''}
     </div>
     <div class="ann-right">
       <div class="ann-prix">${a.prix ? N(a.prix)+' €' : '—'}</div>

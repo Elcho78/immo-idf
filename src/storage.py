@@ -78,6 +78,9 @@ class Storage:
                         type_bien        TEXT,
                         nb_pieces        INTEGER,
                         url              TEXT,
+                        image_url        TEXT,
+                        quartier         TEXT,
+                        code_postal      TEXT,
                         date_scraping    TEXT,
                         actif            BOOLEAN DEFAULT TRUE
                     )
@@ -236,15 +239,16 @@ class Storage:
                 ann.get("delta_dvf_pct"), bool(ann.get("sous_cote")),
                 ann.get("prix_dvf_ref"), ann.get("rendement_estime"),
                 ann.get("type_bien"), ann.get("nb_pieces"),
-                ann.get("url"), ann.get("date_scraping"),
+                ann.get("url"), ann.get("image_url"), ann.get("quartier"),
+            ann.get("code_postal"), ann.get("date_scraping"),
             )
             if pg:
                 cur.execute("""
                     INSERT INTO annonces
                     (id,source,code_commune,nom_commune,titre,prix,surface,prix_m2,
                      delta_dvf_pct,sous_cote,prix_dvf_ref,rendement_estime,
-                     type_bien,nb_pieces,url,date_scraping,actif)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,TRUE)
+                     type_bien,nb_pieces,url,image_url,quartier,code_postal,date_scraping,actif)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,TRUE)
                     ON CONFLICT (id) DO UPDATE SET
                         prix=EXCLUDED.prix, surface=EXCLUDED.surface,
                         prix_m2=EXCLUDED.prix_m2, delta_dvf_pct=EXCLUDED.delta_dvf_pct,
@@ -256,8 +260,8 @@ class Storage:
                     INSERT OR REPLACE INTO annonces
                     (id,source,code_commune,nom_commune,titre,prix,surface,prix_m2,
                      delta_dvf_pct,sous_cote,prix_dvf_ref,rendement_estime,
-                     type_bien,nb_pieces,url,date_scraping,actif)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)
+                     type_bien,nb_pieces,url,image_url,quartier,code_postal,date_scraping,actif)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)
                 """, vals)
             conn.commit()
         finally:
@@ -266,6 +270,7 @@ class Storage:
 
     def get_annonces(self, code_commune=None, source=None, type_bien=None,
                      surface_min=None, surface_max=None, prix_max=None,
+                     prix_min=None, nb_pieces_min=None, quartier=None,
                      sous_cote_only=False, limit=200) -> list[dict]:
         conn, pg = _get_conn()
         ph = "%s" if pg else "?"
@@ -277,6 +282,9 @@ class Storage:
         if surface_min:   where.append(f"surface>={ph}");      params.append(surface_min)
         if surface_max:   where.append(f"surface<={ph}");      params.append(surface_max)
         if prix_max:      where.append(f"prix<={ph}");         params.append(prix_max)
+        if prix_min:      where.append(f"prix>={ph}");         params.append(prix_min)
+        if nb_pieces_min: where.append(f"nb_pieces>={ph}");    params.append(nb_pieces_min)
+        if quartier:      where.append(f"quartier ILIKE {ph}" if pg else f"quartier LIKE {ph}"); params.append(f"%{quartier}%")
         if sous_cote_only: where.append("sous_cote=TRUE" if pg else "sous_cote=1")
         params.append(limit)
         sql = f"""SELECT id,source,code_commune,nom_commune,titre,prix,surface,prix_m2,
@@ -292,7 +300,7 @@ class Storage:
             conn.close()
         cols = ["id","source","code_commune","nom_commune","titre","prix","surface",
                 "prix_m2","delta_dvf_pct","sous_cote","prix_dvf_ref","rendement_estime",
-                "type_bien","nb_pieces","url","date_scraping"]
+                "type_bien","nb_pieces","url","image_url","quartier","code_postal","date_scraping"]
         return [dict(zip(cols, r)) for r in rows]
 
     def get_annonces_stats(self) -> dict:
