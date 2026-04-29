@@ -1,3 +1,5 @@
+import os as _os
+_DATA_ROOT = _os.environ.get("DATA_DIR", "data")
 """
 Source INSEE v5
 - RP2020 LOGEMENT individuel → agrégation par commune si nécessaire
@@ -12,7 +14,7 @@ import httpx
 import pandas as pd
 
 logger = logging.getLogger(__name__)
-CACHE_DIR = Path("data/cache/insee")
+CACHE_DIR = Path(_os.environ.get("DATA_DIR","data")) / "cache" / "insee"
 
 FILO_COM_URLS = [
     "https://www.insee.fr/fr/statistiques/fichier/7756855/FILO2021_DEC_COM.xlsx",
@@ -118,7 +120,7 @@ def _load(name:str, urls:list[str]) -> Optional[pd.DataFrame]:
 def _try(name:str, url:str) -> Optional[pd.DataFrame]:
     try:
         logger.info(f"Téléchargement {name} : {url[:72]}…")
-        resp = httpx.get(url, timeout=900, follow_redirects=True)
+        resp = httpx.get(url, timeout=900, follow_redirects=True, verify=False)
         resp.raise_for_status()
         content = resp.content
 
