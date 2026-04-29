@@ -77,9 +77,11 @@ def run_scraping(config: Config, force: bool = False) -> dict:
 
 def _scrape_source(source, code_insee, nom_commune, filtres) -> list[dict]:
     if source == "pap":
-        from .annonces_pap import scrape_commune
+        from .annonces_pap_playwright import scrape_commune
     elif source == "leboncoin":
         from .annonces_lbc import scrape_commune
+    elif source == "bienici":
+        from .annonces_bienici_playwright import scrape_commune
     else:
         logger.warning(f"Source inconnue : {source}")
         return []
