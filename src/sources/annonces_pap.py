@@ -1,176 +1,93 @@
 """
-Scraper PAP.fr — via flux RSS (pas de blocage, public)
-URL RSS par région IDF : https://www.pap.fr/annonce/ventes-immobilieres-ile-de-france-g439.rss
-URL RSS par département : https://www.pap.fr/annonce/ventes-{type}-{dept}-g{dept}.rss
-
-Le RSS PAP contient dans la description HTML :
-  - Prix, surface, nb pièces, ville
-  - Lien vers l'annonce
+Scraper PAP — via API officielle PAP (JSON, pas de scraping HTML)
+URL : https://api.pap.fr/annonces?categorie=vente&typebien=appartement,maison&departementId=91
 """
 from __future__ import annotations
-
-import hashlib
-import logging
-import re
-import xml.etree.ElementTree as ET
+import hashlib, logging, time
 from datetime import datetime
 from typing import Optional
-
 import httpx
 
 logger = logging.getLogger(__name__)
-
-BASE_URL = "https://www.pap.fr"
-
-# RSS par département IDF
-PAP_RSS = "https://www.pap.fr/annonce/ventes-{type}-{dept}-g{dept}.rss"
-PAP_RSS_IDF = "https://www.pap.fr/annonce/ventes-immobilieres-ile-de-france-g439.rss"
-
-TYPE_MAP = {"appartement": "appartements", "maison": "maisons"}
-
+PAP_API = "https://api.pap.fr/annonces"
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (compatible; RSS reader)",
-    "Accept": "application/rss+xml, application/xml, text/xml",
+    "User-Agent": "Mozilla/5.0 (compatible)",
+    "Accept": "application/json",
+    "Origin": "https://www.pap.fr",
+    "Referer": "https://www.pap.fr/",
 }
+TYPE_MAP = {"appartement": "appartement", "maison": "maison"}
+DEPT_PAP = {"75":"75","77":"77","78":"78","91":"91","92":"92","93":"93","94":"94","95":"95"}
 
-
-def scrape_commune(
-    code_insee: str,
-    nom_commune: str,
-    types: list[str],
-    prix_max: int,
-    surface_min: int,
-    surface_max: Optional[int],
-    nb_pieces_min: int = 1,
-    **kwargs,
-) -> list[dict]:
-    dept = code_insee[:2]
+def scrape_commune(code_insee, nom_commune, types, prix_max, surface_min, surface_max, nb_pieces_min=1, **kwargs):
+    dept = DEPT_PAP.get(code_insee[:2])
+    if not dept: return []
+    type_str = ",".join(TYPE_MAP[t] for t in types if t in TYPE_MAP) or "appartement,maison"
+    params = {"categorie":"vente","typebien":type_str,"departementId":dept,
+              "prixmax":prix_max,"surfacemin":surface_min,"nb_resultats":100,"page":1}
+    if surface_max: params["surfacemax"] = surface_max
+    if nb_pieces_min > 1: params["nbpiecesmin"] = nb_pieces_min
     annonces = []
-
-    for type_bien in types:
-        type_pap = TYPE_MAP.get(type_bien, "appartements")
-        url = PAP_RSS.format(type=type_pap, dept=dept)
-        items = _fetch_rss(url)
-
-        for item in items:
-            ann = _parse_item(item, type_bien, code_insee, nom_commune)
-            if not ann:
-                continue
-            # Filtres
-            if ann["prix"] and ann["prix"] > prix_max:
-                continue
-            if ann["surface"] and surface_min and ann["surface"] < surface_min:
-                continue
-            if ann["surface"] and surface_max and ann["surface"] > surface_max:
-                continue
-            # Filtre commune : le RSS est département-large, on filtre par nom
-            loc = (ann.get("_localisation") or "").lower()
-            if loc and nom_commune.lower()[:6] not in loc and code_insee not in loc:
-                # Accepter quand même si pas de localisation précise
-                if loc and len(loc) > 3:
-                    continue
-            annonces.append(ann)
-
-    logger.info(f"PAP {nom_commune} — {len(annonces)} annonces (RSS)")
+    for page in range(1, 4):
+        params["page"] = page
+        batch = _fetch(params, code_insee, nom_commune)
+        annonces.extend(batch)
+        if len(batch) < 100: break
+        time.sleep(1.5)
+    logger.info(f"PAP API {nom_commune} — {len(annonces)} annonces")
     return annonces
 
-
-def _fetch_rss(url: str) -> list[dict]:
+def _fetch(params, code_insee, nom_commune):
     try:
-        resp = httpx.get(url, headers=HEADERS, timeout=20, follow_redirects=True)
+        resp = httpx.get(PAP_API, params=params, headers=HEADERS, timeout=20, follow_redirects=True)
+        if resp.status_code == 403:
+            logger.warning(f"PAP API — 403")
+            return []
         resp.raise_for_status()
-        root = ET.fromstring(resp.content)
-        items = []
-        for item in root.iter("item"):
-            d = {}
-            for child in item:
-                tag = child.tag.split("}")[-1]  # strip namespace
-                d[tag] = child.text or ""
-            items.append(d)
-        logger.debug(f"RSS {url[:60]} — {len(items)} items")
-        return items
+        data = resp.json()
     except Exception as e:
-        logger.warning(f"PAP RSS {url[:60]} — {e}")
+        logger.warning(f"PAP API {nom_commune} — {e}")
         return []
+    ads = data.get("annonces", data.get("results", data if isinstance(data, list) else []))
+    if not isinstance(ads, list):
+        logger.debug(f"PAP API structure: {list(data.keys()) if isinstance(data,dict) else type(data)}")
+        return []
+    return [a for a in [_parse(ad, code_insee, nom_commune) for ad in ads] if a]
 
-
-def _parse_item(item: dict, type_bien: str, code_insee: str, nom_commune: str) -> Optional[dict]:
-    link = item.get("link", "")
-    if not link:
-        return None
-
-    titre = item.get("title", "Annonce PAP")[:200]
-    desc  = item.get("description", "")
-
-    # Prix — dans title ou description
-    prix = _parse_prix(titre) or _parse_prix(desc)
-    if not prix:
-        return None
-
-    # Surface
-    surface = _parse_surface(titre) or _parse_surface(desc)
-
-    # Pièces
-    pieces = _parse_pieces(titre) or _parse_pieces(desc)
-
-    # Localisation (ville mentionnée)
-    loc = _parse_ville(titre) or _parse_ville(desc) or ""
-
-    prix_m2 = round(prix / surface, 0) if surface and surface > 5 else None
-    ann_id  = "pap_" + hashlib.md5(link.encode()).hexdigest()[:12]
-
+def _parse(ad, code_insee, nom_commune):
+    ad_id = str(ad.get("id", ad.get("reference", "")))
+    if not ad_id: return None
+    prix = ad.get("prix") or ad.get("price")
+    if not prix: return None
+    try: prix = int(float(str(prix).replace(" ","").replace("€","")))
+    except: return None
+    if prix <= 0: return None
+    surface = _f(ad.get("surface") or ad.get("surfaceArea"))
+    nb_pieces = _i(ad.get("nb_pieces") or ad.get("rooms"))
+    type_raw = str(ad.get("typebien", ad.get("type","appartement"))).lower()
+    type_bien = "maison" if "maison" in type_raw else "appartement"
+    prix_m2 = round(prix/surface, 0) if surface and surface > 5 else None
+    photos = ad.get("photos", ad.get("images", []))
+    image_url = (photos[0].get("url") if isinstance(photos[0],dict) else photos[0]) if photos else None
+    ville = ad.get("ville", ad.get("city", nom_commune))
+    cp = str(ad.get("cp", ad.get("codePostal", "")))
+    quartier = ad.get("quartier", ville)
+    titre = ad.get("titre", ad.get("title", f"{type_bien} {nb_pieces or ''} pièces"))
+    slug = ad.get("slug", ad_id)
     return {
-        "id": ann_id,
-        "source": "pap",
-        "code_commune": code_insee,
-        "nom_commune": nom_commune,
-        "titre": titre,
-        "prix": prix,
-        "surface": surface,
-        "prix_m2": prix_m2,
-        "type_bien": type_bien,
-        "nb_pieces": pieces,
-        "url": link,
-        "date_scraping": datetime.now().isoformat(timespec="seconds"),
-        "actif": True,
-        "_localisation": loc,
+        "id": "pap_" + hashlib.md5(ad_id.encode()).hexdigest()[:12],
+        "source": "pap", "code_commune": code_insee, "nom_commune": nom_commune,
+        "titre": str(titre)[:200], "prix": prix, "surface": surface, "prix_m2": prix_m2,
+        "type_bien": type_bien, "nb_pieces": nb_pieces,
+        "url": f"https://www.pap.fr/annonces/{slug}",
+        "image_url": image_url, "quartier": quartier, "ville_lbc": ville, "code_postal": cp,
+        "date_scraping": datetime.now().isoformat(timespec="seconds"), "actif": True,
     }
 
+def _f(v):
+    try: return float(str(v).replace(",",".").replace(" ","")) if v else None
+    except: return None
 
-# ── Parseurs ─────────────────────────────────────────────────────────────────
-
-def _parse_prix(text: str) -> Optional[int]:
-    if not text: return None
-    # "250 000 €" ou "250000€" ou "250.000 €"
-    m = re.search(r"(\d[\d\s\.\u00a0]{3,})\s*€", text)
-    if m:
-        digits = re.sub(r"[^\d]", "", m.group(1))
-        if digits and 10_000 <= int(digits) <= 5_000_000:
-            return int(digits)
-    return None
-
-
-def _parse_surface(text: str) -> Optional[float]:
-    if not text: return None
-    m = re.search(r"(\d+[\.,]?\d*)\s*m²?", text, re.I)
-    if m:
-        v = float(m.group(1).replace(",", "."))
-        if 5 < v < 2000:
-            return v
-    return None
-
-
-def _parse_pieces(text: str) -> Optional[int]:
-    if not text: return None
-    m = re.search(r"(\d)\s*(pièce|chambre|p\.)\b", text, re.I)
-    return int(m.group(1)) if m else None
-
-
-def _parse_ville(text: str) -> Optional[str]:
-    if not text: return None
-    # Ex : "À Massy" / "Massy (91)" / "91300 Massy"
-    m = re.search(r"\b(?:à|À|dans)\s+([A-ZÀ-Ü][a-zà-ü\-]+(?:\s[A-ZÀ-Ü][a-zà-ü\-]+)?)", text)
-    if m: return m.group(1).lower()
-    m = re.search(r"9[0-9]\d{3}\s+([A-ZÀ-Ü][a-zà-ü\-]+)", text)
-    if m: return m.group(1).lower()
-    return None
+def _i(v):
+    try: return int(float(str(v))) if v else None
+    except: return None
