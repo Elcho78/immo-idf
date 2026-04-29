@@ -1,3 +1,4 @@
+from __future__ import annotations
 import os as _os
 _DATA_ROOT = _os.environ.get("DATA_DIR", "data")
 """
@@ -6,7 +7,6 @@ Source INSEE v5
 - Sentinel 24h si INSEE down
 - Filosofi : toujours en attente du retour du serveur INSEE
 """
-from __future__ import annotations
 import io, json, logging, time, zipfile
 from pathlib import Path
 from typing import Optional
