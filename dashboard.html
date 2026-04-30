@@ -744,6 +744,10 @@ function renderDetail() {
         <div class="metric-value">${c.loyer_m2_estime?c.loyer_m2_estime+' €':'—'}</div>
       </div>
       <div class="metric">
+        <div class="metric-label">Prix m² P25/P75</div>
+        <div class="metric-value" style="font-size:12px">${c.prix_m2_p25?N(c.prix_m2_p25)+' / '+N(c.prix_m2_p75||0)+' €':'—'}</div>
+      </div>
+      <div class="metric">
         <div class="metric-label">Transactions DVF</div>
         <div class="metric-value">${c.nb_transactions_dvf||'—'}</div>
       </div>
@@ -829,7 +833,17 @@ function buildBarChart(sel) {
 function buildRadarChart(c) {
   const radar = c.radar || {};
   const labels = ['Rendement','Transports','Tension loc.','Solvabilité','Access. prix','Dynamisme'];
-  const vals = ['rendement','transports','tension_locative','solvabilite_locataires','accessibilite_prix','dynamisme_marche'].map(k => radar[k] || 0);
+  // Calculer les valeurs manquantes depuis données disponibles si INSEE absent
+  const rdt_score = c.score_rendement || (c.rendement_brut ? Math.min(c.rendement_brut/6.5*10,10) : 0);
+  const acc_score = c.prix_m2 ? Math.max(0,(12000-c.prix_m2)/10000*10) : 0;
+  const vals = [
+    radar['rendement'] || rdt_score,
+    radar['transports'] || c.score_transports || 0,
+    radar['tension_locative'] || (c.part_locataires ? Math.min(c.part_locataires/7,10) : 0),
+    radar['solvabilite_locataires'] || (c.revenu_median ? Math.max(0,(c.revenu_median-15000)/40000*10) : 3),
+    radar['accessibilite_prix'] || acc_score,
+    radar['dynamisme_marche'] || (c.evolution_annuelle_pct ? Math.min(Math.max((c.evolution_annuelle_pct+3)/18*10,0),10) : 3),
+  ].map(v => +v.toFixed(1));
 
   // IDF average from all communes radar
   const idfVals = ['rendement','transports','tension_locative','solvabilite_locataires','accessibilite_prix','dynamisme_marche'].map(k => {
@@ -1233,8 +1247,11 @@ function annCard(a, prixRef) {
       <div class="ann-delta ${deltaCls}">${deltaStr}</div>
       ${a.sous_cote ? '<div style="font-size:9px;color:var(--green);font-family:var(--mono)">● sous-coté</div>' : ''}
       <button onclick="masquerAnnonce('${a.id}',this)" title="Masquer cette annonce"
-              style="font-size:10px;background:none;border:1px solid var(--border);border-radius:3px;
-                     color:var(--text3);cursor:pointer;padding:2px 6px;margin-top:3px;font-family:var(--mono)">✕</button>
+              style="font-size:11px;background:rgba(255,77,106,.12);border:1px solid rgba(255,77,106,.4);
+                     border-radius:3px;color:#ff4d6a;cursor:pointer;padding:3px 8px;margin-top:4px;
+                     font-family:var(--mono);font-weight:500;transition:all .15s"
+              onmouseover="this.style.background='rgba(255,77,106,.25)'"
+              onmouseout="this.style.background='rgba(255,77,106,.12)'">✕ masquer</button>
     </div>
   </div>`;
 }

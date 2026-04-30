@@ -162,16 +162,31 @@ def _parse_card(card, body, code_insee, nom_commune):
     surf_str = f" {int(surface)}m²" if surface else ""
     titre = f"{type_str}{pieces_str}{surf_str} — {ville}"
 
-    # URL — PAP met les liens dans des <a> avec href absolu ou relatif
+    # URL — chercher dans tout le card (pas juste body)
     url = ""
     ad_id = ""
+    # PAP format: /annonces/vente-xxx-123456789.htm ou /annonces/123456789.htm
     for a in card.find_all("a", href=True):
         href = a.get("href","")
-        if re.search(r"\d{6,}", href):
+        if "/annonces" in href or re.search(r"/\d{7,}", href):
             url = BASE_URL + href if href.startswith("/") else href
-            m_id = re.search(r"(\d{6,})", href)
+            m_id = re.search(r"(\d{7,})", href)
             ad_id = m_id.group(1) if m_id else ""
             break
+    # Fallback: data-item-id sur le card ou parent
+    if not url:
+        parent = card.parent
+        for el in [card, parent]:
+            if el and el.get("data-annonce"):
+                import json as _json
+                try:
+                    d = _json.loads(el.get("data-annonce","{}"))
+                    if d.get("id"):
+                        ad_id = str(d["id"])
+                        url = f"{BASE_URL}/annonces/vente-{ad_id}.htm"
+                        break
+                except Exception:
+                    pass
     if not ad_id:
         ad_id = hashlib.md5(txt[:50].encode()).hexdigest()[:10]
 
