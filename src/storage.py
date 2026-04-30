@@ -249,22 +249,21 @@ class Storage:
                     INSERT INTO annonces
                     (id,source,code_commune,nom_commune,titre,prix,surface,prix_m2,
                      delta_dvf_pct,sous_cote,prix_dvf_ref,rendement_estime,
-                     type_bien,nb_pieces,url,image_url,quartier,code_postal,date_scraping,masquee,actif)
+                     type_bien,nb_pieces,url,image_url,quartier,code_postal,date_scraping,actif)
                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,TRUE)
                     ON CONFLICT (id) DO UPDATE SET
                         prix=EXCLUDED.prix, surface=EXCLUDED.surface,
                         prix_m2=EXCLUDED.prix_m2, delta_dvf_pct=EXCLUDED.delta_dvf_pct,
                         sous_cote=EXCLUDED.sous_cote, rendement_estime=EXCLUDED.rendement_estime,
                         date_scraping=EXCLUDED.date_scraping, actif=TRUE
-                        -- masquee volontairement exclu : préserve le choix utilisateur
                 """, vals)
             else:
                 cur.execute("""
                     INSERT OR REPLACE INTO annonces
                     (id,source,code_commune,nom_commune,titre,prix,surface,prix_m2,
                      delta_dvf_pct,sous_cote,prix_dvf_ref,rendement_estime,
-                     type_bien,nb_pieces,url,image_url,quartier,code_postal,date_scraping,masquee,actif)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)
+                     type_bien,nb_pieces,url,image_url,quartier,code_postal,date_scraping,actif)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)
                 """, vals)
             conn.commit()
         finally:
