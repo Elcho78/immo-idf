@@ -284,6 +284,29 @@ def trigger_scraping(payload: ScrapingPayload, bg: BackgroundTasks):
     return {"message": "Scraping lancé en arrière-plan"}
 
 
+@app.patch("/annonces/{ann_id}/masquer")
+def masquer_annonce(ann_id: str):
+    """Masque une annonce — ne sera plus affichée."""
+    _storage.masquer_annonce(ann_id)
+    return {"message": f"Annonce {ann_id} masquée"}
+
+
+@app.patch("/annonces/{ann_id}/restaurer")
+def restaurer_annonce(ann_id: str):
+    """Restaure une annonce masquée."""
+    from .storage import _get_conn
+    conn, pg = _get_conn()
+    ph = "%s" if pg else "?"
+    f = "FALSE" if pg else "0"
+    try:
+        cur = conn.cursor()
+        cur.execute(f"UPDATE annonces SET masquee={f} WHERE id={ph}", (ann_id,))
+        conn.commit()
+    finally:
+        conn.close()
+    return {"message": f"Annonce {ann_id} restaurée"}
+
+
 def _run_scraping(force: bool = False) -> None:
     try:
         from .sources.annonces import run_scraping

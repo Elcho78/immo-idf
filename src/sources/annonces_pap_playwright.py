@@ -162,11 +162,18 @@ def _parse_card(card, body, code_insee, nom_commune):
     surf_str = f" {int(surface)}m²" if surface else ""
     titre = f"{type_str}{pieces_str}{surf_str} — {ville}"
 
-    # URL
-    link = card.find("a", href=re.compile(r"/annonces?/\d+|\.htm"))
-    url = BASE_URL + link["href"] if link and link["href"].startswith("/") else (link["href"] if link else "")
-    ad_id = re.search(r"(\d{6,})", url or "")
-    ad_id = ad_id.group(1) if ad_id else hashlib.md5(txt[:50].encode()).hexdigest()[:10]
+    # URL — PAP met les liens dans des <a> avec href absolu ou relatif
+    url = ""
+    ad_id = ""
+    for a in card.find_all("a", href=True):
+        href = a.get("href","")
+        if re.search(r"\d{6,}", href):
+            url = BASE_URL + href if href.startswith("/") else href
+            m_id = re.search(r"(\d{6,})", href)
+            ad_id = m_id.group(1) if m_id else ""
+            break
+    if not ad_id:
+        ad_id = hashlib.md5(txt[:50].encode()).hexdigest()[:10]
 
     # Image
     img = card.find("img")

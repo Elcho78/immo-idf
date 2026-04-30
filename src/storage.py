@@ -82,7 +82,8 @@ class Storage:
                         quartier         TEXT,
                         code_postal      TEXT,
                         date_scraping    TEXT,
-                        actif            BOOLEAN DEFAULT TRUE
+                        actif            BOOLEAN DEFAULT TRUE,
+                        masquee          BOOLEAN DEFAULT FALSE
                     )
                 """)
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_ann_commune ON annonces (code_commune)")
@@ -105,7 +106,8 @@ class Storage:
                         delta_dvf_pct REAL, sous_cote INTEGER DEFAULT 0,
                         prix_dvf_ref REAL, rendement_estime REAL,
                         type_bien TEXT, nb_pieces INTEGER, url TEXT,
-                        date_scraping TEXT, actif INTEGER DEFAULT 1
+                        date_scraping TEXT, actif INTEGER DEFAULT 1,
+                        masquee INTEGER DEFAULT 0
                     );
                     CREATE INDEX IF NOT EXISTS idx_ann_commune ON annonces (code_commune);
                 """)
@@ -247,7 +249,7 @@ class Storage:
                     INSERT INTO annonces
                     (id,source,code_commune,nom_commune,titre,prix,surface,prix_m2,
                      delta_dvf_pct,sous_cote,prix_dvf_ref,rendement_estime,
-                     type_bien,nb_pieces,url,image_url,quartier,code_postal,date_scraping,actif)
+                     type_bien,nb_pieces,url,image_url,quartier,code_postal,date_scraping,masquee,actif)
                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,TRUE)
                     ON CONFLICT (id) DO UPDATE SET
                         prix=EXCLUDED.prix, surface=EXCLUDED.surface,
@@ -260,7 +262,7 @@ class Storage:
                     INSERT OR REPLACE INTO annonces
                     (id,source,code_commune,nom_commune,titre,prix,surface,prix_m2,
                      delta_dvf_pct,sous_cote,prix_dvf_ref,rendement_estime,
-                     type_bien,nb_pieces,url,image_url,quartier,code_postal,date_scraping,actif)
+                     type_bien,nb_pieces,url,image_url,quartier,code_postal,date_scraping,masquee,actif)
                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)
                 """, vals)
             conn.commit()
@@ -274,7 +276,7 @@ class Storage:
                      sous_cote_only=False, limit=200) -> list[dict]:
         conn, pg = _get_conn()
         ph = "%s" if pg else "?"
-        where = ["actif=TRUE"] if pg else ["actif=1"]
+        where = ["actif=TRUE","masquee=FALSE"] if pg else ["actif=1","masquee=0"]
         params = []
         if code_commune: where.append(f"code_commune={ph}"); params.append(code_commune)
         if source:        where.append(f"source={ph}");        params.append(source)
@@ -289,7 +291,7 @@ class Storage:
         params.append(limit)
         sql = f"""SELECT id,source,code_commune,nom_commune,titre,prix,surface,prix_m2,
                          delta_dvf_pct,sous_cote,prix_dvf_ref,rendement_estime,
-                         type_bien,nb_pieces,url,date_scraping
+                         type_bien,nb_pieces,url,image_url,quartier,code_postal,date_scraping,masquee
                   FROM annonces WHERE {' AND '.join(where)}
                   ORDER BY sous_cote DESC, delta_dvf_pct ASC LIMIT {ph}"""
         try:
@@ -300,8 +302,20 @@ class Storage:
             conn.close()
         cols = ["id","source","code_commune","nom_commune","titre","prix","surface",
                 "prix_m2","delta_dvf_pct","sous_cote","prix_dvf_ref","rendement_estime",
-                "type_bien","nb_pieces","url","image_url","quartier","code_postal","date_scraping"]
+                "type_bien","nb_pieces","url","image_url","quartier","code_postal","date_scraping","masquee"]
         return [dict(zip(cols, r)) for r in rows]
+
+    def masquer_annonce(self, ann_id: str) -> None:
+        """Masque une annonce — ne sera plus affichée mais reste en base."""
+        conn, pg = _get_conn()
+        try:
+            cur = conn.cursor()
+            ph = "%s" if pg else "?"
+            f = "TRUE" if pg else "1"
+            cur.execute(f"UPDATE annonces SET masquee={f} WHERE id={ph}", (ann_id,))
+            conn.commit()
+        finally:
+            conn.close()
 
     def get_annonces_stats(self) -> dict:
         conn, pg = _get_conn()

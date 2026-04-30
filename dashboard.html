@@ -1232,6 +1232,9 @@ function annCard(a, prixRef) {
       <div class="ann-prix">${a.prix ? N(a.prix)+' €' : '—'}</div>
       <div class="ann-delta ${deltaCls}">${deltaStr}</div>
       ${a.sous_cote ? '<div style="font-size:9px;color:var(--green);font-family:var(--mono)">● sous-coté</div>' : ''}
+      <button onclick="masquerAnnonce('${a.id}',this)" title="Masquer cette annonce"
+              style="font-size:10px;background:none;border:1px solid var(--border);border-radius:3px;
+                     color:var(--text3);cursor:pointer;padding:2px 6px;margin-top:3px;font-family:var(--mono)">✕</button>
     </div>
   </div>`;
 }
@@ -1267,6 +1270,14 @@ async function triggerScraping() {
   } catch(e) {
     btn.textContent = 'Erreur'; btn.disabled = false;
   }
+}
+
+async function masquerAnnonce(id, btn) {
+  try {
+    await fetch(`${API}/annonces/${id}/masquer`, {method:'PATCH'});
+    btn.closest('.ann-card').style.opacity = '0';
+    setTimeout(() => btn.closest('.ann-card').remove(), 300);
+  } catch(e) { console.error(e); }
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
