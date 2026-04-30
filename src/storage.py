@@ -256,6 +256,7 @@ class Storage:
                         prix_m2=EXCLUDED.prix_m2, delta_dvf_pct=EXCLUDED.delta_dvf_pct,
                         sous_cote=EXCLUDED.sous_cote, rendement_estime=EXCLUDED.rendement_estime,
                         date_scraping=EXCLUDED.date_scraping, actif=TRUE
+                        -- masquee volontairement exclu : préserve le choix utilisateur
                 """, vals)
             else:
                 cur.execute("""
