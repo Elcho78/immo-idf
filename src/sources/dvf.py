@@ -16,6 +16,11 @@ CACHE_DIR = Path("data/cache/dvf")
 DVF_BASE = "https://files.data.gouv.fr/geo-dvf/latest/csv/{year}/departements/{dept}.csv.gz"
 ANNEES = [2024, 2023, 2022]
 
+COLS_UTILES = [
+    "code_commune", "date_mutation", "valeur_fonciere",
+    "surface_reelle_bati", "type_local",
+]
+
 def get_prix_commune(code_insee: str, annees: int = 2, cache_ttl_jours: int = 7) -> dict:
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     cache_file = CACHE_DIR / f"{code_insee}.json"
@@ -68,7 +73,7 @@ def get_prix_commune(code_insee: str, annees: int = 2, cache_ttl_jours: int = 7)
     df["prix_m2"] = df[col_val] / df[col_surf]
     q05, q95 = df["prix_m2"].quantile([0.05, 0.95])
     df = df[(df["prix_m2"] >= q05) & (df["prix_m2"] <= q95)]
-    df = df[df["prix_m2"] <= 12000]  # plafond IDF — élimine locaux d'activité/entrepôts
+    df = df[df["prix_m2"] <= 12000]
     if df.empty:
         return _dvf_vide()
 
@@ -96,24 +101,40 @@ def get_prix_commune(code_insee: str, annees: int = 2, cache_ttl_jours: int = 7)
     logger.info(f"DVF {code_insee} — {result['nb_transactions']} transactions, {result['prix_m2_median']} €/m²")
     return result
 
+
 def _download_dept(dept: str, annee: int) -> Optional[pd.DataFrame]:
     cache_pkl = CACHE_DIR / f"dept_{dept}_{annee}.pkl"
     if cache_pkl.exists() and _cache_valide(cache_pkl, 30):
         return pd.read_pickle(cache_pkl)
+
     url = DVF_BASE.format(year=annee, dept=dept)
     try:
-        resp = httpx.get(url, timeout=180, follow_redirects=True)
-        if resp.status_code == 404:
-            return None
-        resp.raise_for_status()
-        with gzip.open(io.BytesIO(resp.content)) as gz:
-            df = pd.read_csv(gz, dtype=str, low_memory=False)
+        with httpx.stream("GET", url, timeout=180, follow_redirects=True) as resp:
+            if resp.status_code == 404:
+                return None
+            resp.raise_for_status()
+            buffer = io.BytesIO()
+            for chunk in resp.iter_bytes(chunk_size=65536):
+                buffer.write(chunk)
+            buffer.seek(0)
+
+        with gzip.open(buffer) as gz:
+            df = pd.read_csv(
+                gz,
+                dtype=str,
+                low_memory=False,
+                usecols=lambda c: c.lower().replace("_", "") in
+                    [x.replace("_", "") for x in COLS_UTILES],
+            )
+
         df.to_pickle(cache_pkl)
         logger.info(f"DVF dept {dept} {annee} — {len(df)} lignes")
         return df
+
     except Exception as e:
         logger.warning(f"DVF dept {dept} {annee} — {e}")
         return None
+
 
 def _col(df, candidates):
     low = {c.lower(): c for c in df.columns}
